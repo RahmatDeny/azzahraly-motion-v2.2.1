@@ -6,12 +6,12 @@ import { getStorage } from "firebase/storage";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyDVTw07uAnBruFMeS0Lu8G83dz0JTC6BIE",
-  authDomain: "azzahraly-motion.firebaseapp.com",
-  projectId: "azzahraly-motion",
-  storageBucket: "azzahraly-motion.appspot.com",
-  messagingSenderId: "1022489106438",
-  appId: "1:1022489106438:web:fabd02c229cef840aa4b87",
+  apiKey: "AIzaSyBYM_JtHXl4GC3e49GZAwuj4iQeFWYw_yc",
+  authDomain: "azzahraly-motion-v2.firebaseapp.com",
+  projectId: "azzahraly-motion-v2",
+  storageBucket: "azzahraly-motion-v2.firebasestorage.app",
+  messagingSenderId: "1003674415820",
+  appId: "1:1003674415820:web:0a1789e778c1c7c753c869"
 };
 
 // Initialize Firebase
