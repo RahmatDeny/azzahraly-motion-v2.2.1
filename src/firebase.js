@@ -9,7 +9,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyBYM_JtHXl4GC3e49GZAwuj4iQeFWYw_yc",
   authDomain: "azzahraly-motion-v2.firebaseapp.com",
   projectId: "azzahraly-motion-v2",
-  storageBucket: "azzahraly-motion-v2.firebasestorage.app",
+  storageBucket: "azzahraly-motion-v2.appspot.com",
   messagingSenderId: "1003674415820",
   appId: "1:1003674415820:web:0a1789e778c1c7c753c869"
 };
