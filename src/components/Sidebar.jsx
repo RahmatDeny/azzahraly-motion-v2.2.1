@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { SERVO_TYPES_SIDEBAR as SERVO_TYPES } from "../servo-types";
 import appLogo from "../assets/logo.png";
 import azzahralyLogo from "../assets/KRSTI.png";
 import unesaLogo from "../assets/unesa.png";
@@ -8,16 +9,10 @@ import { IoFolderOpen } from "react-icons/io5";
 import { BsInfoCircleFill } from "react-icons/bs";
 import { MdMenuBook } from "react-icons/md";
 import { toast } from "react-toastify";
-import { ref, uploadString } from "firebase/storage";
-import { storage } from "../firebase";
+import { db } from "../firebase";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 
-// ─── Konstanta Tipe Servo ─────────────────────────────────────────────────────
-const SERVO_TYPES = [
-  { label: "Dynamixel AX-12A (0–1023)", value: "ax12a", min: 0, max: 1023 },
-  { label: "Dynamixel MX-28 (0–4095)",  value: "mx28",  min: 0, max: 4095 },
-  { label: "Dynamixel XL-320 (0–1023)", value: "xl320", min: 0, max: 1023 },
-  { label: "Servo Custom",               value: "custom", min: null, max: null },
-];
+
 
 // ─── Dropdown Tipe Servo ──────────────────────────────────────────────────────
 function ServoTypeSelect({ value, onChange, small }) {
@@ -131,7 +126,7 @@ function NewProjectModal({ onClose, onCreated }) {
     if (new Set(ids).size !== ids.length) { toast("ID servo harus unik!"); return; }
 
     setLoading(true);
-    const fileName = `${namaProject.trim()}.json`;
+    const cleanName = namaProject.trim();
     const projectData = {
       servos: servoConfig.map(s => ({
         id: Number(s.id),
@@ -146,10 +141,14 @@ function NewProjectModal({ onClose, onCreated }) {
     };
 
     try {
-      const storageRef = ref(storage, fileName);
-      await uploadString(storageRef, JSON.stringify(projectData, null, 2));
-      toast.success(`✅ Project "${namaProject.trim()}" berhasil dibuat!`);
-      onCreated?.(storageRef, projectData);
+      const projectsCollection = collection(db, "projects");
+      await addDoc(projectsCollection, {
+        name: cleanName,
+        jsonData: projectData,
+        lastModified: serverTimestamp(),
+      });
+      toast.success(`✅ Project "${cleanName}" berhasil dibuat!`);
+      onCreated?.(cleanName, projectData);
       onClose();
     } catch (err) {
       toast.error("Gagal membuat project: " + err.message);
@@ -486,9 +485,12 @@ export default function Sidebar({
 
   function handlerImportButton() {
     if (dataImport === "") { toast("Pilih file terlebih dahulu"); return; }
-    const _ref = ref(storage, importFileName);
-    uploadString(_ref, JSON.stringify(dataImport))
-      .then(() => window.location.reload())
+    const projectsCollection = collection(db, "projects");
+    addDoc(projectsCollection, {
+      name: importFileName.replace(".json", ""),
+      jsonData: dataImport,
+      lastModified: serverTimestamp(),
+    }).then(() => window.location.reload())
       .catch(err => toast(String(err)));
   }
 
@@ -709,10 +711,10 @@ export default function Sidebar({
         }}>
           <NewProjectModal
             onClose={() => document.getElementById("modal_new_project")?.close()}
-            onCreated={(storageRef, projectData) => {
+            onCreated={(projectName, projectData) => {
               document.getElementById("modal_new_project")?.close();
               // ✅ Teruskan ke App.jsx → akan langsung buka project di Edit
-              onNewProjectCreated?.(storageRef, projectData);
+              onNewProjectCreated?.(projectName, projectData);
             }}
           />
         </div>
@@ -808,11 +810,11 @@ export default function Sidebar({
       {showNewProject && (
         <NewProjectModal
           onClose={() => { setShowNewProject(false); setAktif(null); }}
-          onCreated={(storageRef, projectData) => {
+          onCreated={(projectName, projectData) => {
             setShowNewProject(false);
             setAktif(null);
             // ✅ Teruskan ke App.jsx → langsung load project baru di editor
-            onNewProjectCreated?.(storageRef, projectData);
+            onNewProjectCreated?.(projectName, projectData);
           }}
         />
       )}

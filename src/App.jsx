@@ -2,8 +2,8 @@ import { Component } from "react";
 import Sidebar from "./components/Sidebar";
 import Edit from "./components/Edit";
 import Dashboard from "./components/Dashboard";
-import { getBytes, getDownloadURL, ref } from "firebase/storage";
-import { storage } from "./firebase";
+import { db } from "./firebase";
+import { doc, getDoc } from "firebase/firestore";
 import { ToastContainer } from "react-toastify";
 
 class App extends Component {
@@ -69,14 +69,14 @@ class App extends Component {
   //       2. Sidebar di non-Edit mode (dialog#modal_new_project) → lihat Sidebar.jsx
   //
   //     Langsung buka project yang baru dibuat di editor tanpa langkah tambahan.
-  handlerNewProjectCreated(storageRef, projectData) {
+  handlerNewProjectCreated(projectName, projectData) {
     this.setState(prev => ({
       onEdit: true,
       onNewProject: false,
       onDashboard: false,
       onAbout: false,
       editData: {
-        name: storageRef.name,
+        name: projectName,
         data: projectData,
       },
       editKey: prev.editKey + 1, // ✅ Paksa Edit unmount → remount dengan data baru
@@ -84,29 +84,25 @@ class App extends Component {
   }
 
   // ─── Buka project dari Dashboard (recent project) ────────────────────────────
-  handlerOpenRecentProject(project) {
-    const refProject = ref(storage, project.fullPath ?? project.name);
+  async handlerOpenRecentProject(projectId) {
+    try {
+      const docRef = doc(db, "projects", projectId);
+      const docSnap = await getDoc(docRef);
 
-    getDownloadURL(refProject)
-      .then(url => fetch(url).then(r => r.json()))
-      .then(data => {
+      if (docSnap.exists()) {
+        const projectData = docSnap.data();
         this.setState(prev => ({
           onEdit: true,
-          editData: { name: project.name, data },
+          editData: { id: projectId, name: projectData.name, data: projectData.jsonData },
           editKey: prev.editKey + 1, // ✅ Paksa remount
         }));
-      })
-      .catch(() => {
-        getBytes(refProject).then(res => {
-          const enc  = new TextDecoder("utf-8");
-          const data = JSON.parse(enc.decode(res));
-          this.setState(prev => ({
-            onEdit: true,
-            editData: { name: project.name, data },
-            editKey: prev.editKey + 1, // ✅ Paksa remount
-          }));
-        });
-      });
+      } else {
+        console.error("No such document!");
+        // Optionally, handle the case where the project is not found
+      }
+    } catch (error) {
+      console.error("Error getting document:", error);
+    }
   }
 
   handlerDashboard() {
@@ -165,12 +161,14 @@ class App extends Component {
                 key={this.state.editKey}
                 data={this.state.editData}
                 onBack={this.handlerDashboard}
+                handlerOpenRecentProject={this.handlerOpenRecentProject}
               />
             ) : onAbout ? (
               <About />
             ) : (
               <Dashboard
                 handlerOpenRecentProject={this.handlerOpenRecentProject}
+                handlerNewProjectCreated={this.handlerNewProjectCreated}
               />
             )}
           </div>

@@ -1,7 +1,17 @@
-import { ref, uploadString, listAll, getDownloadURL, getMetadata } from "firebase/storage";
+import { SERVO_TYPES } from "../servo-types";
+import { db } from "../firebase";
+import {
+  doc,
+  updateDoc,
+  serverTimestamp,
+  collection,
+  query,
+  orderBy,
+  getDocs,
+  getDoc,
+} from "firebase/firestore";
 import { Component } from "react";
 import { toast } from "react-toastify";
-import { storage } from "../firebase";
 import {
   FaSave, FaPlus, FaMinus, FaCode,
   FaUndo, FaRedo, FaPowerOff, FaCopy,
@@ -68,35 +78,22 @@ class OpenProjectModal extends Component {
   }
 
   loadProjects() {
-    const refProject = ref(storage, "/");
-    listAll(refProject).then((res) => {
-      const metaPromises = res.items.map((item) => getMetadata(item));
-      const urlPromises = res.items.map((item) => getDownloadURL(item));
-
-      Promise.all([Promise.all(metaPromises), Promise.all(urlPromises)]).then(
-        async ([metadatas, urls]) => {
-          const contentPromises = urls.map((url) =>
-            fetch(url).then((r) => r.json()).catch(() => null)
-          );
-          const contents = await Promise.all(contentPromises);
-
-          const projects = metadatas.map((metadata, index) => {
-            const file = res.items[index];
-            const content = contents[index];
-            return {
-              ref: file,
-              name: file.name,
-              updated: metadata.updated,
-              lastModified: moment(metadata.updated).locale("id").format("D MMMM YYYY, HH:mm"),
-              servoCount: content?.servos?.length ?? 0,
-              motionCount: content?.motions?.length ?? 0,
-            };
-          });
-
-          projects.sort((a, b) => new Date(b.updated) - new Date(a.updated));
-          this.setState({ projects, loading: false });
-        }
-      );
+    const projectsCollection = collection(db, "projects");
+    const q = query(projectsCollection, orderBy("lastModified", "desc"));
+    
+    getDocs(q).then(querySnapshot => {
+      const projects = querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data();
+        const jsonData = data.jsonData || {};
+        return {
+          id: docSnap.id,
+          name: data.name,
+          lastModified: data.lastModified?.toDate() ? moment(data.lastModified.toDate()).locale("id").format("D MMMM YYYY, HH:mm") : "N/A",
+          servoCount: jsonData.servos?.length ?? 0,
+          motionCount: jsonData.motions?.length ?? 0,
+        };
+      });
+      this.setState({ projects, loading: false });
     }).catch(() => this.setState({ loading: false }));
   }
 
@@ -162,7 +159,7 @@ class OpenProjectModal extends Component {
                   <div
                     key={index}
                     onClick={() => this.setState({ selectedProject: project })}
-                    onDoubleClick={() => { this.setState({ selectedProject: project }, () => onOpen(project.ref)); }}
+                    onDoubleClick={() => { this.setState({ selectedProject: project }, () => onOpen(project.id)); }}
                     style={{
                       padding: '13px 16px', borderRadius: 12, marginBottom: 8, cursor: 'pointer',
                       background: isSelected ? 'linear-gradient(135deg, rgba(14,165,233,0.22), rgba(37,99,235,0.22))' : 'rgba(255,255,255,0.04)',
@@ -223,7 +220,7 @@ class OpenProjectModal extends Component {
                 background: 'transparent', color: '#94a3b8', fontSize: 13, fontWeight: 600, cursor: 'pointer',
               }}>Batal</button>
               <button
-                onClick={() => selectedProject && onOpen(selectedProject.ref)}
+                onClick={() => selectedProject && onOpen(selectedProject.id)}
                 disabled={!selectedProject}
                 style={{
                   padding: '8px 20px', borderRadius: 8, border: 'none',
@@ -345,6 +342,7 @@ export default class Edit extends Component {
       // Responsive state
       containerWidth: window.innerWidth,
     };
+    this.autoSave = this.debounce(() => this.save(), 1000);
     this.saveNewMotion = this.saveNewMotion.bind(this);
     this.saveEditMotion = this.saveEditMotion.bind(this);
     this.handlerDeleteMotion = this.handlerDeleteMotion.bind(this);
@@ -380,7 +378,7 @@ export default class Edit extends Component {
 
     window.addEventListener("keydown", (event) => {
       if (event.ctrlKey && (event.key === "S" || event.key === "s")) {
-        event.preventDefault(); this.save();
+        event.preventDefault(); this.save("💾 Project Saved!");
       } else if (event.ctrlKey && (event.key === "Z" || event.key === "z")) {
         event.preventDefault(); this.undo();
       } else if (event.ctrlKey && (event.key === "Y" || event.key === "y")) {
@@ -393,6 +391,8 @@ export default class Edit extends Component {
           navigator.clipboard.writeText(JSON.stringify(this.state.data.motions[this.state.activeMotion].steps[this.state.activeStep]));
         }
       } else if (event.ctrlKey && (event.key === "V" || event.key === "v")) {
+        const tag = document.activeElement?.tagName?.toLowerCase();
+        if (tag === "input" || tag === "textarea") return;
         navigator.clipboard.readText().then((res) => {
           try {
             const d = JSON.parse(res);
@@ -433,6 +433,15 @@ export default class Edit extends Component {
     if (this._ro) this._ro.disconnect();
   }
 
+  debounce(func, delay) {
+    let timeout;
+    return function(...args) {
+      const context = this;
+      clearTimeout(timeout);
+      timeout = setTimeout(() => func.apply(context, args), delay);
+    };
+  }
+
   handleResize() {
     this.setState({ containerWidth: this._containerRef?.offsetWidth ?? window.innerWidth });
   }
@@ -460,30 +469,13 @@ export default class Edit extends Component {
     }
   }
 
-  openProjectFromRef(storageRef) {
-    getDownloadURL(storageRef).then((url) => {
-      fetch(url).then(r => r.json()).then((content) => {
-        this.history = [];
-        this.historyIndex = -1;
-        this.setState({
-          data: content,
-          activeMotion: null,
-          activeStep: null,
-          activeIdGroup: null,
-          poseRobot: [],
-          isPlaying: false,
-          showOpenProjectModal: false,
-        }, () => {
-          this.addToHistory(this.state.data);
-          if (this.props.onProjectChange) {
-            this.props.onProjectChange({ name: storageRef.name, data: content });
-          } else {
-            this._currentStorageName = storageRef.name;
-          }
-          toast(`✅ Project "${storageRef.name}" dibuka!`);
-        });
-      }).catch(() => toast.error("Gagal memuat project"));
-    }).catch(() => toast.error("Gagal mengambil URL project"));
+  openProjectFromRef(projectId) {
+    // Defer to the App component to handle opening the project
+    if (this.props.handlerOpenRecentProject) {
+      this.props.handlerOpenRecentProject(projectId);
+    } else {
+      console.error("handlerOpenRecentProject prop not passed to Edit component");
+    }
   }
 
   openNewMotionModal() {
@@ -500,6 +492,7 @@ export default class Edit extends Component {
     this.state.data.motions.push({ name: name.value.trim(), steps: [], next: 0 });
     this.setState({ data: this.state.data, showNewMotionModal: false });
     this.addToHistory(this.state.data);
+    this.save("Motion Added");
   }
 
   saveEditMotion() {
@@ -507,6 +500,7 @@ export default class Edit extends Component {
     this.state.data.motions[this.state.activeMotion].name = name.value;
     this.setState({ data: this.state.data });
     this.addToHistory(this.state.data);
+    this.save("Edit Motion Name Success");
   }
 
   saveIdGroup() {
@@ -520,6 +514,7 @@ export default class Edit extends Component {
     list_servo.forEach((e) => { e.checked = false; });
     this.setState({ data: this.state.data });
     this.addToHistory(this.state.data);
+    this.save("Servo Group Added");
   }
 
   selectIdGroup(index) {
@@ -536,6 +531,7 @@ export default class Edit extends Component {
     this.state.data.idGroups.splice(this.state.activeIdGroup, 1);
     this.setState({ activeIdGroup: null, data: this.state.data });
     this.addToHistory(this.state.data);
+    this.autoSave();
   }
 
   handlerMotionClick(index) {
@@ -548,18 +544,23 @@ export default class Edit extends Component {
     this.state.data.motions.splice(this.state.activeMotion, 1);
     this.setState({ activeStep: null, activeMotion: null, data: this.state.data });
     this.addToHistory(this.state.data);
+    this.autoSave();
   }
 
   handlerChangeNextMotion(val, index) {
     this.state.data.motions[index].next = val;
     this.setState({ data: this.state.data });
     this.addToHistory(this.state.data);
+    this.autoSave();
   }
 
   handlerNewStep(afterIndex = null) {
     if (this.state.activeMotion == null) { toast("Select motion first"); return; }
     const tempValue = [];
-    this.state.data.servos.forEach((servo) => { tempValue.push(servo.servo === "XL-320" ? 512 : 2048); });
+    this.state.data.servos.forEach((servo) => {
+        const servoType = SERVO_TYPES.find(t => t.value === servo.type);
+        tempValue.push(servoType?.defaultValue ?? 0);
+    });
     const newStep = { time: 1000, pause: 0, value: tempValue };
     if (afterIndex !== null) {
       this.state.data.motions[this.state.activeMotion].steps.splice(afterIndex + 1, 0, newStep);
@@ -568,6 +569,7 @@ export default class Edit extends Component {
     }
     this.setState({ data: this.state.data });
     this.addToHistory(this.state.data);
+    this.autoSave();
   }
 
   handlerCopyStep(index) {
@@ -576,6 +578,7 @@ export default class Edit extends Component {
     steps.splice(index + 1, 0, copy);
     this.setState({ data: this.state.data });
     this.addToHistory(this.state.data);
+    this.autoSave();
   }
 
   handlerMoveStep(index, direction) {
@@ -585,6 +588,7 @@ export default class Edit extends Component {
     const temp = steps[index]; steps[index] = steps[newIndex]; steps[newIndex] = temp;
     this.setState({ data: this.state.data, activeStep: newIndex });
     this.addToHistory(this.state.data);
+    this.autoSave();
   }
 
   handlerStepClick(index) {
@@ -598,18 +602,21 @@ export default class Edit extends Component {
     this.state.data.motions[this.state.activeMotion].steps.splice(idx, 1);
     this.setState({ activeStep: null, data: this.state.data });
     this.addToHistory(this.state.data);
+    this.autoSave();
   }
 
   handlerChangeTime(value, index) {
     this.state.data.motions[this.state.activeMotion].steps[index].time = value;
     this.setState({ data: this.state.data });
     this.addToHistory(this.state.data);
+    this.autoSave();
   }
 
   handlerChangePause(value, index) {
     this.state.data.motions[this.state.activeMotion].steps[index].pause = value;
     this.setState({ data: this.state.data });
     this.addToHistory(this.state.data);
+    this.autoSave();
   }
 
   handlerChangeStepVal(value, index) {
@@ -618,10 +625,32 @@ export default class Edit extends Component {
     this.addToHistory(this.state.data);
   }
 
-  save() {
-    const name = this._currentStorageName || this.props.data.name;
-    const dataRef = ref(storage, name);
-    uploadString(dataRef, JSON.stringify(this.state.data)).then(() => toast("Data saved"));
+  async save(toastMessage = null) {
+    const projectId = this.props.data.id;
+    if (!projectId) {
+      // Also check for the old way of getting name, for projects opened before the change
+      const name = this._currentStorageName || this.props.data.name;
+      if (name) {
+        toast.warn("Project opened in a legacy way. Please re-open from dashboard to save.");
+      } else {
+        toast.error("Project ID not found. Cannot save.");
+      }
+      return;
+    }
+
+    const docRef = doc(db, "projects", projectId);
+    try {
+      await updateDoc(docRef, {
+        jsonData: this.state.data,
+        lastModified: serverTimestamp(),
+      });
+      if (toastMessage) {
+        toast(toastMessage);
+      }
+    } catch (error) {
+      console.error("Error saving data: ", error);
+      toast.error("Failed to save data: " + error.message);
+    }
   }
 
   connect = () => {
@@ -787,6 +816,7 @@ export default class Edit extends Component {
     this.state.data.motions.push(result);
     this.setState({ data: this.state.data });
     this.addToHistory(this.state.data);
+    this.autoSave();
   }
 
   render() {
@@ -995,7 +1025,7 @@ export default class Edit extends Component {
             </div>
 
             {/* Save */}
-            <button className="nav-btn" style={{ ...navBtnBase, background: '#10b981', color: 'white' }} onClick={this.save}>
+            <button className="nav-btn" style={{ ...navBtnBase, background: '#10b981', color: 'white' }} onClick={() => this.save("💾 Project Saved!")}>
               <FaSave style={{ fontSize: s(12) }} /> {!isTiny && 'Save'}
             </button>
 
@@ -1242,7 +1272,16 @@ export default class Edit extends Component {
                     <FaCopy style={{ fontSize: s(11) }} />
                   </button>
                   <button className="hdr-btn" style={cardHeaderBtn} title="Reset to default"
-                    onClick={() => { if (activeStepData && data.servos) { activeStepData.value = activeStepData.value.map((_, i) => data.servos[i]?.servo === "XL-320" ? 512 : 2048); this.setState({ data }); this.addToHistory(data); } }}>
+                    onClick={() => {
+                      if (activeStepData && data.servos) {
+                        activeStepData.value = activeStepData.value.map((_, i) => {
+                          const servoType = SERVO_TYPES.find(t => t.value === data.servos[i]?.type);
+                          return servoType?.defaultValue ?? 0;
+                        });
+                        this.setState({ data });
+                        this.addToHistory(data);
+                      }
+                    }}>
                     <IoRefresh style={{ fontSize: s(13) }} />
                   </button>
                 </div>

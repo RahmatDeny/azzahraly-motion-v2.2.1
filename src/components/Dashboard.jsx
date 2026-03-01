@@ -1,16 +1,19 @@
+import { db } from "../firebase";
 import {
-  listAll,
-  ref,
-  getDownloadURL,
-  deleteObject,
-  getMetadata,
-  uploadString,
-} from "firebase/storage";
-import { storage } from "../firebase";
+  collection,
+  query,
+  orderBy,
+  getDocs,
+  addDoc,
+  deleteDoc,
+  doc,
+  serverTimestamp,
+} from "firebase/firestore";
 import { toast } from "react-toastify";
 import moment from "moment/moment";
 import { useState, useEffect } from "react";
 import azzahralyLogo from "../assets/KRSTI.png";
+import { SERVO_TYPES } from "../servo-types";
 
 // ─── Icons (inline SVG) ──────────────────────────────────────────────────────
 const PlusIcon = () => (
@@ -80,14 +83,6 @@ const AlertIcon = () => (
     <line x1="12" y1="16" x2="12.01" y2="16"/>
   </svg>
 );
-
-// ─── Constants ───────────────────────────────────────────────────────────────
-const SERVO_TYPES = [
-  { label: "Dynamixel AX-12A", value: "ax12a", min: 0, max: 1023 },
-  { label: "Dynamixel MX-28", value: "mx28", min: 0, max: 4095 },
-  { label: "Dynamixel XL-320", value: "xl320", min: 0, max: 1023 },
-  { label: "Custom Servo", value: "custom", min: null, max: null },
-];
 
 // ─── Select Dropdown component ────────────────────────────────────────────────
 function Select({ value, onChange, options, placeholder, small }) {
@@ -472,44 +467,35 @@ function ProjectCard({ project, onOpen, onDelete, onDownload }) {
 }
 
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
-export default function Dashboard({ handlerOpenRecentProject }) {
+export default function Dashboard({ handlerOpenRecentProject, handlerNewProjectCreated }) {
   const [projects, setProjects]         = useState([]);
   const [showCreate, setShowCreate]     = useState(false);
   const [showImport, setShowImport]     = useState(false);
-  // ✅ State untuk konfirmasi hapus: null = tidak tampil, object = project yang akan dihapus
   const [deleteTarget, setDeleteTarget] = useState(null);
 
-  function loadProjects() {
-    const refProject = ref(storage, "/");
-    listAll(refProject).then((res) => {
-      const metaPromises = res.items.map((item) => getMetadata(item));
-      const urlPromises  = res.items.map((item) => getDownloadURL(item));
+  const projectsCollection = collection(db, "projects");
 
-      Promise.all([Promise.all(metaPromises), Promise.all(urlPromises)]).then(
-        async ([metadatas, urls]) => {
-          const contentPromises = urls.map((url) =>
-            fetch(url).then((r) => r.json()).catch(() => null)
-          );
-          const contents = await Promise.all(contentPromises);
-
-          const updatedFiles = metadatas.map((metadata, index) => {
-            const file    = res.items[index];
-            const content = contents[index];
-            return {
-              ref: file,
-              name: file.name,
-              updated: metadata.updated,
-              lastModified: moment(metadata.updated).locale("id").format("D MMMM YYYY, HH:mm:ss"),
-              servoCount:  content?.servos?.length  ?? 0,
-              motionCount: content?.motions?.length ?? 0,
-            };
-          });
-
-          updatedFiles.sort((a, b) => new Date(b.updated) - new Date(a.updated));
-          setProjects(updatedFiles);
+  async function loadProjects() {
+    try {
+      const q = query(projectsCollection, orderBy("lastModified", "desc"));
+      const querySnapshot = await getDocs(q);
+      const projectList = querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        const jsonData = data.jsonData || {};
+        return {
+          id: doc.id,
+          name: data.name,
+          lastModified: data.lastModified?.toDate() ? moment(data.lastModified.toDate()).locale("id").format("D MMMM YYYY, HH:mm:ss") : "N/A",
+          servoCount: jsonData.servos?.length ?? 0,
+          motionCount: jsonData.motions?.length ?? 0,
+          jsonData: jsonData, // Keep full data for download/open
         }
-      );
-    });
+      });
+      setProjects(projectList);
+    } catch (error) {
+      console.error("Error loading projects: ", error);
+      toast.error("Gagal memuat projects: " + error.message);
+    }
   }
 
   useEffect(() => { loadProjects(); }, []);
@@ -517,9 +503,8 @@ export default function Dashboard({ handlerOpenRecentProject }) {
   const handleCreate = async ({ projectName, servoConfigs }) => {
     if (!projectName?.trim()) { toast.error("Nama project harus diisi!"); return; }
 
-    const cleanName   = projectName.trim();
-    const fileName    = `${cleanName}.json`;
-    const projectData = {
+    const cleanName = projectName.trim();
+    const projectJsonData = {
       servos: servoConfigs.map(s => ({
         id: Number(s.id), type: s.type,
         servo: SERVO_TYPES.find(t => t.value === s.type)?.label.split(" (")[0] || s.type.toUpperCase(),
@@ -529,12 +514,15 @@ export default function Dashboard({ handlerOpenRecentProject }) {
       createdAt: new Date().toISOString(), version: "2.2.1",
     };
 
-    const storageRef = ref(storage, fileName);
     try {
-      await uploadString(storageRef, JSON.stringify(projectData, null, 2));
+      const docRef = await addDoc(projectsCollection, {
+        name: cleanName,
+        lastModified: serverTimestamp(),
+        jsonData: projectJsonData
+      });
       toast.success(`✅ Project "${cleanName}" berhasil dibuat!`, { autoClose: 1500 });
       setShowCreate(false);
-      handlerOpenRecentProject(storageRef);
+      handlerNewProjectCreated(cleanName, projectJsonData);
     } catch (error) {
       console.error(error);
       toast.error("Gagal membuat project: " + error.message);
@@ -544,14 +532,20 @@ export default function Dashboard({ handlerOpenRecentProject }) {
   const handleImport = async (file) => {
     try {
       const text = await file.text();
-      const data = JSON.parse(text);
-      const storageRef = ref(storage, file.name);
-      await uploadString(storageRef, JSON.stringify(data, null, 2));
+      const data = JSON.parse(text); // Validate JSON
+      const cleanName = file.name.replace('.json', '');
+
+      await addDoc(projectsCollection, {
+        name: cleanName,
+        lastModified: serverTimestamp(),
+        jsonData: data
+      });
+
       toast.success("✅ Project berhasil diimport!");
       setShowImport(false);
-      loadProjects();
+      loadProjects(); // Refresh project list
     } catch (err) {
-      toast.error("File JSON tidak valid");
+      toast.error("File JSON tidak valid atau gagal impor.");
     }
   };
 
@@ -561,22 +555,33 @@ export default function Dashboard({ handlerOpenRecentProject }) {
   }
 
   // ✅ Eksekusi hapus setelah user konfirmasi
-  function handleDeleteConfirm() {
-    const project = deleteTarget;
+  async function handleDeleteConfirm() {
+    if (!deleteTarget) return;
+    const projectToDelete = deleteTarget;
     setDeleteTarget(null);
-    const _ref = ref(storage, project.ref);
-    deleteObject(_ref)
-      .then(() => {
-        toast.success(`🗑️ Project "${project.name}" dihapus.`, { autoClose: 2000 });
-        loadProjects();
-      })
-      .catch((error) => toast.error(error.message));
+
+    try {
+      await deleteDoc(doc(db, "projects", projectToDelete.id));
+      toast.success(`🗑️ Project "${projectToDelete.name}" dihapus.`, { autoClose: 2000 });
+      loadProjects(); // Refresh project list
+    } catch (error) {
+      toast.error(error.message);
+    }
   }
 
   function handleDownload(project) {
-    getDownloadURL(ref(storage, project.ref))
-      .then((url) => window.location.assign(url))
-      .catch((error) => toast(error.message));
+    try {
+      const jsonString = JSON.stringify(project.jsonData, null, 2);
+      const blob = new Blob([jsonString], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${project.name}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      toast.error("Gagal membuat file download: " + error.message);
+    }
   }
 
   return (
@@ -687,9 +692,9 @@ export default function Dashboard({ handlerOpenRecentProject }) {
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 20, alignContent: "start" }}>
                 {projects.map((project, index) => (
                   <ProjectCard
-                    key={project.name + index}
+                    key={project.id}
                     project={project}
-                    onOpen={() => handlerOpenRecentProject(project.ref)}
+                    onOpen={() => handlerOpenRecentProject(project.id)}
                     onDelete={() => handleDeleteClick(project)}
                     onDownload={() => handleDownload(project)}
                   />
