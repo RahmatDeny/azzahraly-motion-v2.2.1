@@ -324,6 +324,7 @@ export default class Edit extends Component {
   activeTab = "";
   history = [];
   historyIndex = -1;
+  playTimer = null;
 
   constructor(props) {
     super(props);
@@ -695,6 +696,7 @@ export default class Edit extends Component {
 
   disconnect() {
     this.stopMotion = false;
+    if (this.playTimer) { clearTimeout(this.playTimer); this.playTimer = null; }
     this.setState({ connected: false, poseRobot: [], isPlaying: false });
     this.serial.close();
   }
@@ -741,6 +743,7 @@ export default class Edit extends Component {
   async play() {
     if (this.state.activeMotion == null) { toast("Select motion first"); return; }
     this.stopMotion = true;
+    if (this.playTimer) { clearTimeout(this.playTimer); this.playTimer = null; }
     let ms = parseInt(this.state.msPerStep);
     if (isNaN(ms)) ms = 23; if (ms < 5) ms = 5; if (ms > 60) ms = 60;
     await this.sendCommand(`D,${ms}`);
@@ -750,17 +753,26 @@ export default class Edit extends Component {
       send += step.time + "," + step.pause + ",:";
     });
     await this.sendCommand(send);
+    // Estimasi durasi total untuk reset tombol Play/Stop
+    const totalMs = this.state.data.motions[this.state.activeMotion].steps
+      .reduce((acc, step) => acc + Number(step.time || 0) + Number(step.pause || 0), 0);
+    this.playTimer = setTimeout(() => {
+      this.stopMotion = false;
+      this.setState({ isPlaying: false });
+      this.playTimer = null;
+    }, totalMs + 300); // +300ms buffer
   }
 
   sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 
+  /**
+   * Kirim perintah ke STM dengan frame tunggal: aaaa*<command>#\n
+   * - Menghindari pemotongan di tengah angka (masalah chunk 50 char)
+   * - Tambah newline supaya sisi STM yang pakai readStringUntil('\n') juga aman
+   */
   async sendCommand(command) {
-    await this.serial.send("aaaa*");
-    for (let i = 0; i < Math.ceil(command.length / 50); i++) {
-      await this.serial.send(command.substr(i * 50, 50));
-      await this.sleep(100);
-    }
-    await this.serial.send("#");
+    const frame = `aaaa*${command}#\n`;
+    await this.serial.send(frame);
   }
 
   generate() {
@@ -859,9 +871,10 @@ export default class Edit extends Component {
       display: 'flex', alignItems: 'center', gap: s(7),
       padding: isActive ? `${s(7)}px ${s(12)}px ${s(7)}px ${s(9)}px` : `${s(7)}px ${s(12)}px`,
       borderBottom: '1px solid #f8fafc',
-      borderLeft: isActive ? '3px solid #3b82f6' : '3px solid transparent',
-      background: isActive ? '#eff6ff' : 'white',
-      transition: 'background 0.1s',
+      borderLeft: isActive ? '4px solid #2563eb' : '3px solid transparent',
+      background: isActive ? '#dbeafe' : 'white', // lebih pekat saat aktif
+      boxShadow: isActive ? 'inset 0 0 0 1px #bfdbfe' : 'none',
+      transition: 'background 0.1s, box-shadow 0.1s',
     });
     const numBadge = (isActive) => ({
       width: s(28), height: s(28), borderRadius: '50%', flexShrink: 0,
@@ -1002,7 +1015,11 @@ export default class Edit extends Component {
             <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.08)', borderRadius: s(11), padding: `${s(4)}px ${s(8)}px`, gap: s(8) }}>
               <button
                 onClick={() => {
-                  if (isPlaying) { this.stopMotion = false; this.setState({ isPlaying: false }); }
+                  if (isPlaying) {
+                    this.stopMotion = false;
+                    if (this.playTimer) { clearTimeout(this.playTimer); this.playTimer = null; }
+                    this.setState({ isPlaying: false });
+                  }
                   else { this.stopMotion = true; this.setState({ isPlaying: true }, () => this.play()); }
                 }}
                 disabled={!isPlaying && (activeMotion === null || !connected)}

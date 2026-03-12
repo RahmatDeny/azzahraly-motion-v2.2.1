@@ -522,7 +522,7 @@ export default function Dashboard({ handlerOpenRecentProject, handlerNewProjectC
       });
       toast.success(`✅ Project "${cleanName}" berhasil dibuat!`, { autoClose: 1500 });
       setShowCreate(false);
-      handlerNewProjectCreated(cleanName, projectJsonData);
+      handlerNewProjectCreated(cleanName, projectJsonData, docRef.id);
     } catch (error) {
       console.error(error);
       toast.error("Gagal membuat project: " + error.message);

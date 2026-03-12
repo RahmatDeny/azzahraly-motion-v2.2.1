@@ -142,13 +142,13 @@ function NewProjectModal({ onClose, onCreated }) {
 
     try {
       const projectsCollection = collection(db, "projects");
-      await addDoc(projectsCollection, {
+      const docRef = await addDoc(projectsCollection, {
         name: cleanName,
         jsonData: projectData,
         lastModified: serverTimestamp(),
       });
       toast.success(`✅ Project "${cleanName}" berhasil dibuat!`);
-      onCreated?.(cleanName, projectData);
+      onCreated?.(cleanName, projectData, docRef.id);
       onClose();
     } catch (err) {
       toast.error("Gagal membuat project: " + err.message);
@@ -711,10 +711,10 @@ export default function Sidebar({
         }}>
           <NewProjectModal
             onClose={() => document.getElementById("modal_new_project")?.close()}
-            onCreated={(projectName, projectData) => {
+            onCreated={(projectName, projectData, projectId) => {
               document.getElementById("modal_new_project")?.close();
               // ✅ Teruskan ke App.jsx → akan langsung buka project di Edit
-              onNewProjectCreated?.(projectName, projectData);
+              onNewProjectCreated?.(projectName, projectData, projectId);
             }}
           />
         </div>
@@ -792,7 +792,7 @@ export default function Sidebar({
           </div>
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
             <iframe
-              src="https://firebasestorage.googleapis.com/v0/b/azzahraly-motion.appspot.com/o/guide.pdf?alt=media&token=2d922c94-cefd-4927-8b8a-cf373eb7e742"
+              src="/guide.pdf"
               allowFullScreen
               style={{ width: "100%", height: "100%", border: "none", borderRadius: 10 }}
               title="Panduan Pengguna PDF"
@@ -810,11 +810,11 @@ export default function Sidebar({
       {showNewProject && (
         <NewProjectModal
           onClose={() => { setShowNewProject(false); setAktif(null); }}
-          onCreated={(projectName, projectData) => {
+          onCreated={(projectName, projectData, projectId) => {
             setShowNewProject(false);
             setAktif(null);
             // ✅ Teruskan ke App.jsx → langsung load project baru di editor
-            onNewProjectCreated?.(projectName, projectData);
+            onNewProjectCreated?.(projectName, projectData, projectId);
           }}
         />
       )}

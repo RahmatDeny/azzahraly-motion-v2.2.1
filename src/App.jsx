@@ -14,10 +14,11 @@ class App extends Component {
     onDashboard: false,
     onAbout: false,
     editData: {
+      id: null,
       name: null,
       data: null,
     },
-    editKey: 0, // ✅ Naikkan setiap ganti project → paksa Edit unmount/remount
+    editKey: 0, // Naikkan setiap ganti project → paksa Edit unmount/remount
   };
 
   constructor() {
@@ -47,7 +48,7 @@ class App extends Component {
       onNewProject: false,
       onDashboard: false,
       onEdit: true,
-      editData: { name, data },
+      editData: { id: null, name, data },
     });
   }
 
@@ -63,23 +64,18 @@ class App extends Component {
     });
   }
 
-  // ─── ✅ HANDLER UTAMA: dipanggil setelah modal New Project berhasil create ────
-  //     Berlaku dari DUA sumber:
-  //       1. Sidebar di Edit mode (isEditMode=true) → overlay modal
-  //       2. Sidebar di non-Edit mode (dialog#modal_new_project) → lihat Sidebar.jsx
-  //
-  //     Langsung buka project yang baru dibuat di editor tanpa langkah tambahan.
-  handlerNewProjectCreated(projectName, projectData) {
+  handlerNewProjectCreated(projectName, projectData, projectId = null) {
     this.setState(prev => ({
       onEdit: true,
       onNewProject: false,
       onDashboard: false,
       onAbout: false,
       editData: {
+        id: projectId,
         name: projectName,
         data: projectData,
       },
-      editKey: prev.editKey + 1, // ✅ Paksa Edit unmount → remount dengan data baru
+      editKey: prev.editKey + 1, 
     }));
   }
 
@@ -94,7 +90,7 @@ class App extends Component {
         this.setState(prev => ({
           onEdit: true,
           editData: { id: projectId, name: projectData.name, data: projectData.jsonData },
-          editKey: prev.editKey + 1, // ✅ Paksa remount
+          editKey: prev.editKey + 1,
         }));
       } else {
         console.error("No such document!");
@@ -127,15 +123,9 @@ class App extends Component {
     return (
       <>
         <ToastContainer />
-        {/* ✅ PERBAIKAN: tambah h-screen overflow-hidden agar layout rapat & tidak gap */}
         <div className="flex flex-row h-screen overflow-hidden">
-
-          {/* Sidebar hanya muncul saat bukan Dashboard */}
           {!isDashboard && (
-            // ✅ PERBAIKAN: hapus width manual (sm/md/lg/xl), biarkan Sidebar
-            //    mengelola lebarnya sendiri via CSS (220px/60px). flex-shrink-0
-            //    mencegah Sidebar menyusut saat konten Edit melebar.
-            <div className="font-Inter flex-shrink-0">
+              <div className="font-Inter flex-shrink-0">
               <Sidebar
                 handlerNewProject={this.handlerNewProject}
                 handlerOpenProject={this.handlerOpenProject}
@@ -147,9 +137,6 @@ class App extends Component {
             </div>
           )}
 
-          {/* ✅ PERBAIKAN: flex-1 min-w-0 agar konten utama mengisi sisa ruang
-              secara otomatis tanpa perlu kalkulasi manual (xl:w-[82vw]) yang
-              tidak sinkron dengan lebar Sidebar yang bisa collapsed/expanded. */}
           <div className={`flex-1 min-w-0 ${isDashboard ? "" : "overflow-hidden"}`}>
             {onNewProject ? (
               <NewProject

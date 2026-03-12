@@ -115,7 +115,7 @@ export default class Serial {
     const encoder = new TextEncoder();
     const writer = this.outputStream.getWriter();
 
-    writer.write(encoder.encode(value));
+    await writer.write(encoder.encode(value));
     writer.releaseLock();
     /*sendMessage(value, this.outputStream)
 
