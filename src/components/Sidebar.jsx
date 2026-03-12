@@ -147,7 +147,7 @@ function NewProjectModal({ onClose, onCreated }) {
         jsonData: projectData,
         lastModified: serverTimestamp(),
       });
-      toast.success(`✅ Project "${cleanName}" berhasil dibuat!`);
+      toast.success(`Project "${cleanName}" berhasil dibuat!`);
       onCreated?.(cleanName, projectData, docRef.id);
       onClose();
     } catch (err) {
@@ -699,11 +699,6 @@ export default function Sidebar({
           <span className="version-text">Versi 2.2.1</span>
         </div>
       </aside>
-
-      {/* ══ Modal New Project (non-Edit mode) ══
-          ✅ FIX: onCreated sekarang meneruskan storageRef & projectData ke App.jsx
-                  lewat onNewProjectCreated, sehingga langsung masuk ke Edit.
-      */}
       <dialog id="modal_new_project" className="modal" onClose={() => setAktif(null)}>
         <div className="modal-box" style={{
           background: "#0d1b2a", border: "1px solid rgba(245,158,11,0.2)",
@@ -713,7 +708,6 @@ export default function Sidebar({
             onClose={() => document.getElementById("modal_new_project")?.close()}
             onCreated={(projectName, projectData, projectId) => {
               document.getElementById("modal_new_project")?.close();
-              // ✅ Teruskan ke App.jsx → akan langsung buka project di Edit
               onNewProjectCreated?.(projectName, projectData, projectId);
             }}
           />

@@ -753,23 +753,17 @@ export default class Edit extends Component {
       send += step.time + "," + step.pause + ",:";
     });
     await this.sendCommand(send);
-    // Estimasi durasi total untuk reset tombol Play/Stop
     const totalMs = this.state.data.motions[this.state.activeMotion].steps
       .reduce((acc, step) => acc + Number(step.time || 0) + Number(step.pause || 0), 0);
     this.playTimer = setTimeout(() => {
       this.stopMotion = false;
       this.setState({ isPlaying: false });
       this.playTimer = null;
-    }, totalMs + 300); // +300ms buffer
+    }, totalMs + 300);
   }
 
   sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 
-  /**
-   * Kirim perintah ke STM dengan frame tunggal: aaaa*<command>#\n
-   * - Menghindari pemotongan di tengah angka (masalah chunk 50 char)
-   * - Tambah newline supaya sisi STM yang pakai readStringUntil('\n') juga aman
-   */
   async sendCommand(command) {
     const frame = `aaaa*${command}#\n`;
     await this.serial.send(frame);
@@ -840,11 +834,9 @@ export default class Edit extends Component {
     const isSmall = containerWidth < 1100;
     const isTiny  = containerWidth < 800;
 
-    // Desktop scale = 1.0, split = 0.85, tiny = 0.75
     const scale = isSmall ? (isTiny ? 0.75 : 0.85) : 1;
     const s = (val) => Math.round(val * scale);
 
-    // ─── Shared style helpers ───
     const card = {
       background: '#ffffff', borderRadius: s(16),
       boxShadow: '0 2px 12px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.04)',
@@ -872,7 +864,7 @@ export default class Edit extends Component {
       padding: isActive ? `${s(7)}px ${s(12)}px ${s(7)}px ${s(9)}px` : `${s(7)}px ${s(12)}px`,
       borderBottom: '1px solid #f8fafc',
       borderLeft: isActive ? '4px solid #2563eb' : '3px solid transparent',
-      background: isActive ? '#dbeafe' : 'white', // lebih pekat saat aktif
+      background: isActive ? '#dbeafe' : 'white',
       boxShadow: isActive ? 'inset 0 0 0 1px #bfdbfe' : 'none',
       transition: 'background 0.1s, box-shadow 0.1s',
     });
@@ -921,15 +913,12 @@ export default class Edit extends Component {
       background: disabled ? '#e2e8f0' : 'linear-gradient(135deg,#06b6d4,#3b82f6)',
       color: disabled ? '#94a3b8' : 'white', transition: 'transform 0.15s',
     });
-
-    // Navbar button style
+le
     const navBtnBase = {
       display: 'inline-flex', alignItems: 'center', gap: s(6),
       padding: `${s(7)}px ${s(12)}px`, borderRadius: s(9), border: 'none',
       cursor: 'pointer', fontSize: s(13), fontWeight: 600,
     };
-
-    // Col widths
     const col1Width = s(235);
     const col2Width = isSmall ? s(290) : 410;
     const transferColWidth = s(56);

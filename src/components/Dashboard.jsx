@@ -520,7 +520,7 @@ export default function Dashboard({ handlerOpenRecentProject, handlerNewProjectC
         lastModified: serverTimestamp(),
         jsonData: projectJsonData
       });
-      toast.success(`✅ Project "${cleanName}" berhasil dibuat!`, { autoClose: 1500 });
+      toast.success(`Project "${cleanName}" berhasil dibuat!`, { autoClose: 1500 });
       setShowCreate(false);
       handlerNewProjectCreated(cleanName, projectJsonData, docRef.id);
     } catch (error) {
@@ -532,7 +532,7 @@ export default function Dashboard({ handlerOpenRecentProject, handlerNewProjectC
   const handleImport = async (file) => {
     try {
       const text = await file.text();
-      const data = JSON.parse(text); // Validate JSON
+      const data = JSON.parse(text);
       const cleanName = file.name.replace('.json', '');
 
       await addDoc(projectsCollection, {
@@ -541,20 +541,18 @@ export default function Dashboard({ handlerOpenRecentProject, handlerNewProjectC
         jsonData: data
       });
 
-      toast.success("✅ Project berhasil diimport!");
+      toast.success("Project berhasil diimport!");
       setShowImport(false);
-      loadProjects(); // Refresh project list
+      loadProjects();
     } catch (err) {
       toast.error("File JSON tidak valid atau gagal impor.");
     }
   };
 
-  // ✅ Tampilkan modal konfirmasi — belum hapus
   function handleDeleteClick(project) {
     setDeleteTarget(project);
   }
 
-  // ✅ Eksekusi hapus setelah user konfirmasi
   async function handleDeleteConfirm() {
     if (!deleteTarget) return;
     const projectToDelete = deleteTarget;
@@ -562,8 +560,8 @@ export default function Dashboard({ handlerOpenRecentProject, handlerNewProjectC
 
     try {
       await deleteDoc(doc(db, "projects", projectToDelete.id));
-      toast.success(`🗑️ Project "${projectToDelete.name}" dihapus.`, { autoClose: 2000 });
-      loadProjects(); // Refresh project list
+      toast.success(`Project "${projectToDelete.name}" dihapus.`, { autoClose: 2000 });
+      loadProjects();
     } catch (error) {
       toast.error(error.message);
     }
@@ -712,7 +710,6 @@ export default function Dashboard({ handlerOpenRecentProject, handlerNewProjectC
       {showCreate && <CreateProjectModal onClose={() => setShowCreate(false)} onCreate={handleCreate} />}
       {showImport && <ImportProjectModal onClose={() => setShowImport(false)} onImport={handleImport} />}
 
-      {/* ✅ Modal konfirmasi hapus */}
       {deleteTarget && (
         <DeleteConfirmModal
           projectName={deleteTarget.name}
@@ -724,7 +721,6 @@ export default function Dashboard({ handlerOpenRecentProject, handlerNewProjectC
   );
 }
 
-// ─── Shared Styles ────────────────────────────────────────────────────────────
 const styles = {
   overlay: {
     position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)",
