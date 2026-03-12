@@ -913,7 +913,6 @@ export default class Edit extends Component {
       background: disabled ? '#e2e8f0' : 'linear-gradient(135deg,#06b6d4,#3b82f6)',
       color: disabled ? '#94a3b8' : 'white', transition: 'transform 0.15s',
     });
-le
     const navBtnBase = {
       display: 'inline-flex', alignItems: 'center', gap: s(6),
       padding: `${s(7)}px ${s(12)}px`, borderRadius: s(9), border: 'none',
