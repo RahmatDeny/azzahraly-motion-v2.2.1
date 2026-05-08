@@ -397,13 +397,14 @@ export default class Edit extends Component {
         navigator.clipboard.readText().then((res) => {
           try {
             const d = JSON.parse(res);
+            const data = this.cloneData();
             if (this.activeTab === "motion") {
-              this.state.data.motions.push(d);
+              data.motions.push(d);
             } else if (this.activeTab === "step") {
-              this.state.data.motions[this.state.activeMotion].steps.push(d);
+              data.motions[this.state.activeMotion].steps.push(d);
             }
-            this.setState({ data: this.state.data });
-            this.addToHistory(this.state.data);
+            this.setState({ data });
+            this.addToHistory(data);
           } catch (e) { toast(String(e)); }
         });
       } else if (event.key === " " || event.code === "Space") {
@@ -454,6 +455,10 @@ export default class Edit extends Component {
     if (this.history.length > 50) { this.history.shift(); this.historyIndex--; }
   }
 
+  cloneData() {
+    return JSON.parse(JSON.stringify(this.state.data));
+  }
+
   undo() {
     if (this.historyIndex > 0) {
       this.historyIndex--;
@@ -490,17 +495,19 @@ export default class Edit extends Component {
   saveNewMotion() {
     const name = document.getElementById("input_new_motion_modal");
     if (!name || !name.value.trim()) { toast("Motion name is required"); return; }
-    this.state.data.motions.push({ name: name.value.trim(), steps: [], next: 0 });
-    this.setState({ data: this.state.data, showNewMotionModal: false });
-    this.addToHistory(this.state.data);
+    const data = this.cloneData();
+    data.motions.push({ name: name.value.trim(), steps: [], next: 0 });
+    this.setState({ data, showNewMotionModal: false });
+    this.addToHistory(data);
     this.save("Motion Added");
   }
 
   saveEditMotion() {
     const name = document.getElementById("input_edit_motion");
-    this.state.data.motions[this.state.activeMotion].name = name.value;
-    this.setState({ data: this.state.data });
-    this.addToHistory(this.state.data);
+    const data = this.cloneData();
+    data.motions[this.state.activeMotion].name = name.value;
+    this.setState({ data });
+    this.addToHistory(data);
     this.save("Edit Motion Name Success");
   }
 
@@ -510,28 +517,31 @@ export default class Edit extends Component {
     let checked = [];
     if (!name.value) { toast("Name is required"); return; }
     list_servo.forEach((e) => { if (e.checked) checked.push(e.value); });
-    this.state.data.idGroups.push({ name: name.value, ids: checked });
+    const data = this.cloneData();
+    data.idGroups.push({ name: name.value, ids: checked });
     name.value = "";
     list_servo.forEach((e) => { e.checked = false; });
-    this.setState({ data: this.state.data });
-    this.addToHistory(this.state.data);
+    this.setState({ data });
+    this.addToHistory(data);
     this.save("Servo Group Added");
   }
 
   selectIdGroup(index) {
     if (!this.state.poseRobot.length) { toast("Connect to robot first"); return; }
-    this.state.poseRobot.forEach((servo) => {
-      servo.selected = false;
-      this.state.data.idGroups[index].ids.forEach((id) => { if (servo.id == id) servo.selected = true; });
+    const selectedIds = this.state.data.idGroups[index].ids;
+    const poseRobot = this.state.poseRobot.map((servo) => {
+      const selected = selectedIds.some((id) => servo.id == id);
+      return { ...servo, selected };
     });
-    this.setState({ activeIdGroup: index, poseRobot: this.state.poseRobot });
+    this.setState({ activeIdGroup: index, poseRobot });
   }
 
   deleteIdGroup() {
     if (this.state.activeIdGroup == null) { toast("Select group first"); return; }
-    this.state.data.idGroups.splice(this.state.activeIdGroup, 1);
-    this.setState({ activeIdGroup: null, data: this.state.data });
-    this.addToHistory(this.state.data);
+    const data = this.cloneData();
+    data.idGroups.splice(this.state.activeIdGroup, 1);
+    this.setState({ activeIdGroup: null, data });
+    this.addToHistory(data);
     this.autoSave();
   }
 
@@ -542,16 +552,18 @@ export default class Edit extends Component {
 
   handlerDeleteMotion() {
     if (this.state.activeMotion == null) { toast("Select motion first"); return; }
-    this.state.data.motions.splice(this.state.activeMotion, 1);
-    this.setState({ activeStep: null, activeMotion: null, data: this.state.data });
-    this.addToHistory(this.state.data);
+    const data = this.cloneData();
+    data.motions.splice(this.state.activeMotion, 1);
+    this.setState({ activeStep: null, activeMotion: null, data });
+    this.addToHistory(data);
     this.autoSave();
   }
 
   handlerChangeNextMotion(val, index) {
-    this.state.data.motions[index].next = val;
-    this.setState({ data: this.state.data });
-    this.addToHistory(this.state.data);
+    const data = this.cloneData();
+    data.motions[index].next = val;
+    this.setState({ data });
+    this.addToHistory(data);
     this.autoSave();
   }
 
@@ -563,32 +575,35 @@ export default class Edit extends Component {
         tempValue.push(servoType?.defaultValue ?? 0);
     });
     const newStep = { time: 1000, pause: 0, value: tempValue };
+    const data = this.cloneData();
     if (afterIndex !== null) {
-      this.state.data.motions[this.state.activeMotion].steps.splice(afterIndex + 1, 0, newStep);
+      data.motions[this.state.activeMotion].steps.splice(afterIndex + 1, 0, newStep);
     } else {
-      this.state.data.motions[this.state.activeMotion].steps.push(newStep);
+      data.motions[this.state.activeMotion].steps.push(newStep);
     }
-    this.setState({ data: this.state.data });
-    this.addToHistory(this.state.data);
+    this.setState({ data });
+    this.addToHistory(data);
     this.autoSave();
   }
 
   handlerCopyStep(index) {
-    const steps = this.state.data.motions[this.state.activeMotion].steps;
+    const data = this.cloneData();
+    const steps = data.motions[this.state.activeMotion].steps;
     const copy = JSON.parse(JSON.stringify(steps[index]));
     steps.splice(index + 1, 0, copy);
-    this.setState({ data: this.state.data });
-    this.addToHistory(this.state.data);
+    this.setState({ data });
+    this.addToHistory(data);
     this.autoSave();
   }
 
   handlerMoveStep(index, direction) {
-    const steps = this.state.data.motions[this.state.activeMotion].steps;
+    const data = this.cloneData();
+    const steps = data.motions[this.state.activeMotion].steps;
     const newIndex = index + direction;
     if (newIndex < 0 || newIndex >= steps.length) return;
     const temp = steps[index]; steps[index] = steps[newIndex]; steps[newIndex] = temp;
-    this.setState({ data: this.state.data, activeStep: newIndex });
-    this.addToHistory(this.state.data);
+    this.setState({ data, activeStep: newIndex });
+    this.addToHistory(data);
     this.autoSave();
   }
 
@@ -600,30 +615,34 @@ export default class Edit extends Component {
   handlerDeleteStep(index = null) {
     const idx = index !== null ? index : this.state.activeStep;
     if (idx == null) { toast("Select step first"); return; }
-    this.state.data.motions[this.state.activeMotion].steps.splice(idx, 1);
-    this.setState({ activeStep: null, data: this.state.data });
-    this.addToHistory(this.state.data);
+    const data = this.cloneData();
+    data.motions[this.state.activeMotion].steps.splice(idx, 1);
+    this.setState({ activeStep: null, data });
+    this.addToHistory(data);
     this.autoSave();
   }
 
   handlerChangeTime(value, index) {
-    this.state.data.motions[this.state.activeMotion].steps[index].time = value;
-    this.setState({ data: this.state.data });
-    this.addToHistory(this.state.data);
+    const data = this.cloneData();
+    data.motions[this.state.activeMotion].steps[index].time = value;
+    this.setState({ data });
+    this.addToHistory(data);
     this.autoSave();
   }
 
   handlerChangePause(value, index) {
-    this.state.data.motions[this.state.activeMotion].steps[index].pause = value;
-    this.setState({ data: this.state.data });
-    this.addToHistory(this.state.data);
+    const data = this.cloneData();
+    data.motions[this.state.activeMotion].steps[index].pause = value;
+    this.setState({ data });
+    this.addToHistory(data);
     this.autoSave();
   }
 
   handlerChangeStepVal(value, index) {
-    this.state.data.motions[this.state.activeMotion].steps[this.state.activeStep].value[index] = value;
-    this.setState({ data: this.state.data });
-    this.addToHistory(this.state.data);
+    const data = this.cloneData();
+    data.motions[this.state.activeMotion].steps[this.state.activeStep].value[index] = value;
+    this.setState({ data });
+    this.addToHistory(data);
   }
 
   async save(toastMessage = null) {
@@ -667,7 +686,6 @@ export default class Edit extends Component {
         if (message === "OK") {
           if (this.state.data.motions[this.state.activeMotion].next != 0) {
             const next = this.state.data.motions[this.state.activeMotion].next;
-            this.state.activeMotion = next;
             this.setState({ activeMotion: next });
             if (this.stopMotion) this.play();
           }
@@ -675,16 +693,16 @@ export default class Edit extends Component {
           try {
             const d = JSON.parse(message);
             if (d.type === "c") {
-              d.servos.forEach((s) => { s.selected = false; });
-              this.setState({ connected: true, poseRobot: d.servos });
+              const poseRobot = d.servos.map((s) => ({ ...s, selected: false }));
+              this.setState({ connected: true, poseRobot });
             } else if (d.type === "r") {
-              this.state.poseRobot.forEach((servo) => {
-                if (servo.selected) {
-                  const found = d.servos.filter((e) => e.id == servo.id);
-                  servo.state = found[0].state; servo.value = found[0].value;
-                }
+              const poseRobot = this.state.poseRobot.map((servo) => {
+                if (!servo.selected) return servo;
+                const found = d.servos.find((e) => e.id == servo.id);
+                if (!found) return servo;
+                return { ...servo, state: found.state, value: found.value };
               });
-              this.setState({ poseRobot: this.state.poseRobot });
+              this.setState({ poseRobot });
             }
           } catch (e) { console.log(e); }
         }
@@ -702,30 +720,40 @@ export default class Edit extends Component {
   }
 
   selectServo(index) {
-    this.state.poseRobot[index].selected = !this.state.poseRobot[index].selected;
-    this.setState({ poseRobot: this.state.poseRobot });
+    const poseRobot = this.state.poseRobot.map((servo, i) => (
+      i === index ? { ...servo, selected: !servo.selected } : servo
+    ));
+    this.setState({ poseRobot });
   }
 
   off() {
     let send = "F";
     this.state.poseRobot.forEach((s) => { if (s.selected) send += s.id + ","; });
     this.sendCommand(send);
-    this.setState({ servoOn: false });
+    const poseRobot = this.state.poseRobot.map((servo) => (
+      servo.selected ? { ...servo, state: false } : servo
+    ));
+    this.setState({ servoOn: false, poseRobot });
   }
 
   on() {
     this.sendCommand("r");
-    this.setState({ servoOn: true });
+    const poseRobot = this.state.poseRobot.map((servo) => ({ ...servo, state: true }));
+    this.setState({ servoOn: true, poseRobot });
   }
 
   sendPose() {
     let send = "p";
-    this.state.data.motions[this.state.activeMotion].steps[this.state.activeStep].value.forEach((val, index) => {
+    const activeValues = this.state.data.motions[this.state.activeMotion].steps[this.state.activeStep].value;
+    activeValues.forEach((val) => {
       send += val + ",";
-      this.state.poseRobot[index].value = val;
-      this.state.poseRobot[index].state = true;
     });
-    this.setState({ poseRobot: this.state.poseRobot });
+    const poseRobot = this.state.poseRobot.map((servo, index) => ({
+      ...servo,
+      value: activeValues[index],
+      state: true,
+    }));
+    this.setState({ poseRobot });
     this.addToHistory(this.state.data);
     this.sendCommand(send);
   }
@@ -733,11 +761,13 @@ export default class Edit extends Component {
   getPose() {
     if (this.state.activeMotion == null) { toast("Select motion first"); return; }
     if (this.state.activeStep == null) { toast("Select step first"); return; }
-    this.state.data.motions[this.state.activeMotion].steps[this.state.activeStep].value.forEach((val, index) => {
-      this.state.data.motions[this.state.activeMotion].steps[this.state.activeStep].value[index] = this.state.poseRobot[index].value;
-    });
-    this.setState({ data: this.state.data });
-    this.addToHistory(this.state.data);
+    const data = this.cloneData();
+    data.motions[this.state.activeMotion].steps[this.state.activeStep].value =
+      data.motions[this.state.activeMotion].steps[this.state.activeStep].value.map((_, index) => (
+        this.state.poseRobot[index]?.value
+      ));
+    this.setState({ data });
+    this.addToHistory(data);
   }
 
   async play() {
@@ -747,6 +777,7 @@ export default class Edit extends Component {
     let ms = parseInt(this.state.msPerStep);
     if (isNaN(ms)) ms = 23; if (ms < 5) ms = 5; if (ms > 60) ms = 60;
     await this.sendCommand(`D,${ms}`);
+    await this.sleep(100);
     let send = "Y";
     this.state.data.motions[this.state.activeMotion].steps.forEach((step) => {
       step.value.forEach((val) => { send += val + ","; });
@@ -819,9 +850,10 @@ export default class Edit extends Component {
   buttonImportMotion() {
     const data = document.getElementById("textarea_import_motion").value;
     const result = this.importMotion(data);
-    this.state.data.motions.push(result);
-    this.setState({ data: this.state.data });
-    this.addToHistory(this.state.data);
+    const nextData = this.cloneData();
+    nextData.motions.push(result);
+    this.setState({ data: nextData });
+    this.addToHistory(nextData);
     this.autoSave();
   }
 
@@ -1350,17 +1382,20 @@ export default class Edit extends Component {
                     <span style={{ flex: 1, textAlign: 'center' }}>Value</span>
                   </div>
                   <div className="slim-scroll" style={{ flex: 1, overflowY: 'auto' }}>
-                    {poseRobot.map((servo, index) => (
-                      <div key={index} className="row-hover" onClick={() => this.selectServo(index)}
-                        style={{ ...rowItem(servo.selected), cursor: 'pointer' }}>
-                        <span style={{ width: s(30), fontSize: s(14), fontWeight: 800, color: '#475569', flexShrink: 0, textAlign: 'center' }}>{servo.id}</span>
-                        <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
-                          <span style={{ background: servo.selected ? '#bfdbfe' : '#dbeafe', color: servo.selected ? '#1d4ed8' : '#2563eb', fontSize: s(14), fontWeight: 800, padding: `${s(4)}px ${s(12)}px`, borderRadius: s(8), minWidth: s(48), textAlign: 'center' }}>
-                            {servo.value}
-                          </span>
+                    {poseRobot.map((servo, index) => {
+                      const isServoOff = servo.state === false;
+                      return (
+                        <div key={index} className="row-hover" onClick={() => this.selectServo(index)}
+                          style={{ ...rowItem(servo.selected), cursor: 'pointer' }}>
+                          <span style={{ width: s(30), fontSize: s(14), fontWeight: 800, color: '#475569', flexShrink: 0, textAlign: 'center' }}>{servo.id}</span>
+                          <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
+                            <span style={{ background: isServoOff ? '#fee2e2' : servo.selected ? '#bfdbfe' : '#dbeafe', color: isServoOff ? '#dc2626' : servo.selected ? '#1d4ed8' : '#2563eb', fontSize: s(14), fontWeight: 800, padding: `${s(4)}px ${s(12)}px`, borderRadius: s(8), minWidth: s(48), textAlign: 'center' }}>
+                              {isServoOff ? 'OFF' : servo.value}
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                   <div style={{ padding: `${s(5)}px ${s(12)}px ${s(7)}px`, background: '#fafbfc', borderTop: '1px solid #f1f5f9', flexShrink: 0 }}>
                     <span style={{ fontSize: s(12), color: '#94a3b8' }}>ℹ Real-time (read-only)</span>
