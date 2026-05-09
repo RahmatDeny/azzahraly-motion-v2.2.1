@@ -528,6 +528,11 @@ export default class Edit extends Component {
 
   selectIdGroup(index) {
     if (!this.state.poseRobot.length) { toast("Connect to robot first"); return; }
+    if (this.state.activeIdGroup === index) {
+      const poseRobot = this.state.poseRobot.map((servo) => ({ ...servo, selected: false }));
+      this.setState({ activeIdGroup: null, poseRobot });
+      return;
+    }
     const selectedIds = this.state.data.idGroups[index].ids;
     const poseRobot = this.state.poseRobot.map((servo) => {
       const selected = selectedIds.some((id) => servo.id == id);
@@ -693,7 +698,7 @@ export default class Edit extends Component {
           try {
             const d = JSON.parse(message);
             if (d.type === "c") {
-              const poseRobot = d.servos.map((s) => ({ ...s, selected: false }));
+              const poseRobot = d.servos.map((s) => ({ ...s, selected: false, offByButton: false }));
               this.setState({ connected: true, poseRobot });
             } else if (d.type === "r") {
               const poseRobot = this.state.poseRobot.map((servo) => {
@@ -731,14 +736,14 @@ export default class Edit extends Component {
     this.state.poseRobot.forEach((s) => { if (s.selected) send += s.id + ","; });
     this.sendCommand(send);
     const poseRobot = this.state.poseRobot.map((servo) => (
-      servo.selected ? { ...servo, state: false } : servo
+      servo.selected ? { ...servo, state: false, offByButton: true } : servo
     ));
     this.setState({ servoOn: false, poseRobot });
   }
 
   on() {
     this.sendCommand("r");
-    const poseRobot = this.state.poseRobot.map((servo) => ({ ...servo, state: true }));
+    const poseRobot = this.state.poseRobot.map((servo) => ({ ...servo, state: true, offByButton: false }));
     this.setState({ servoOn: true, poseRobot });
   }
 
@@ -752,6 +757,7 @@ export default class Edit extends Component {
       ...servo,
       value: activeValues[index],
       state: true,
+      offByButton: false,
     }));
     this.setState({ poseRobot });
     this.addToHistory(this.state.data);
@@ -963,6 +969,7 @@ export default class Edit extends Component {
           .slim-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
           .slim-scroll { scrollbar-width: thin; scrollbar-color: #cbd5e1 #f8fafc; }
           .row-hover:hover { background: #f8fafc !important; }
+          .row-hover.id-group-active:hover { background: linear-gradient(135deg,#0ea5e9,#2563eb) !important; color: white !important; }
           .hdr-btn:hover { background: rgba(255,255,255,0.35) !important; }
           .transfer-btn-hover:hover:not(:disabled) { transform: scale(1.07); }
           .nav-btn { display:inline-flex; align-items:center; gap:5px; border-radius:8px; border:none; cursor:pointer; font-weight:600; }
@@ -1211,7 +1218,7 @@ export default class Edit extends Component {
                 </div>
                 <div className="slim-scroll" style={{ flex: 1, overflowY: 'auto', padding: `${s(6)}px ${s(10)}px` }}>
                   {data.idGroups?.length > 0 ? data.idGroups.map((group, index) => (
-                    <div key={index} onClick={() => this.selectIdGroup(index)} className="row-hover"
+                    <div key={index} onClick={() => this.selectIdGroup(index)} className={`row-hover${activeIdGroup === index ? ' id-group-active' : ''}`}
                       style={{
                         padding: `${s(7)}px ${s(10)}px`, borderRadius: s(9), marginBottom: s(4),
                         cursor: 'pointer', fontSize: s(14), fontWeight: 500, transition: 'all 0.15s',
@@ -1383,7 +1390,7 @@ export default class Edit extends Component {
                   </div>
                   <div className="slim-scroll" style={{ flex: 1, overflowY: 'auto' }}>
                     {poseRobot.map((servo, index) => {
-                      const isServoOff = servo.state === false;
+                      const isServoOff = servo.offByButton === true;
                       return (
                         <div key={index} className="row-hover" onClick={() => this.selectServo(index)}
                           style={{ ...rowItem(servo.selected), cursor: 'pointer' }}>
