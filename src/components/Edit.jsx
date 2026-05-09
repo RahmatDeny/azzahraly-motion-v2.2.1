@@ -802,8 +802,13 @@ export default class Edit extends Component {
   sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 
   async sendCommand(command) {
-    const frame = `aaaa*${command}#\n`;
-    await this.serial.send(frame);
+    await this.serial.send("aaaa*");
+    for (let i = 0; i < Math.ceil(command.length / 50); i++) {
+      const chunk = command.substr(i * 50, 50);
+      await this.serial.send(chunk);
+      await this.sleep(50);
+    }
+    await this.serial.send("#");
   }
 
   generate() {
