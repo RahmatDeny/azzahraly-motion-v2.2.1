@@ -786,7 +786,7 @@ export default function Sidebar({
           </div>
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
             <iframe
-              src="/guide.pdf"
+              src="/Guide.pdf"
               allowFullScreen
               style={{ width: "100%", height: "100%", border: "none", borderRadius: 10 }}
               title="Panduan Pengguna PDF"
