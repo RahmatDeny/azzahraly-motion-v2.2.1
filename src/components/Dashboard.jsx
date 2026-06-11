@@ -549,6 +549,7 @@ export default function Dashboard({ handlerOpenRecentProject, handlerNewProjectC
     }
   };
 
+
   function handleDeleteClick(project) {
     setDeleteTarget(project);
   }
